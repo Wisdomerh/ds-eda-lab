@@ -45,6 +45,11 @@ export class EDAAppStack extends cdk.Stack {
       receiveMessageWaitTime: cdk.Duration.seconds(10),
     });
 
+    // Status update mailer queue
+    const statusUpdateMailerQ = new sqs.Queue(this, "status-update-mailer-queue", {
+      receiveMessageWaitTime: cdk.Duration.seconds(10),
+    });
+
     // Add SNS topics
     const newImageTopic = new sns.Topic(this, "NewImageTopic", {
       displayName: "New Image topic",
@@ -78,9 +83,12 @@ export class EDAAppStack extends cdk.Stack {
       memorySize: 1024,
       timeout: cdk.Duration.seconds(3),
       entry: `${__dirname}/../lambdas/mailer.ts`,
+      environment: {
+        TABLE_NAME: photosTable.tableName,
+      },
     });
 
-    // New Lambda functions for the photo gallery
+    // Additional Lambda functions for the photo gallery
     const removeImageFn = new lambdanode.NodejsFunction(
       this,
       "RemoveImageFn",
@@ -121,29 +129,13 @@ export class EDAAppStack extends cdk.Stack {
       }
     );
 
-    const statusUpdateMailerFn = new lambdanode.NodejsFunction(
-      this,
-      "StatusUpdateMailerFn",
-      {
-        runtime: lambda.Runtime.NODEJS_16_X,
-        entry: `${__dirname}/../lambdas/statusUpdateMailer.ts`,
-        timeout: cdk.Duration.seconds(15),
-        environment: {
-          TABLE_NAME: photosTable.tableName,
-          SES_REGION: process.env.SES_REGION || 'eu-west-1',
-          SES_EMAIL_FROM: process.env.SES_EMAIL_FROM || 'wisdomonsobo@gmail.com',
-          SES_EMAIL_TO: process.env.SES_EMAIL_TO || '20097898@mail.wit.ie',
-        },
-      }
-    );
-
     // S3 --> SNS
     imagesBucket.addEventNotification(
       s3.EventType.OBJECT_CREATED,
       new s3n.SnsDestination(newImageTopic)
     );
 
-    // SNS --> SQS with filters
+    // SNS --> SQS with filters for valid images
     newImageTopic.addSubscription(
       new subs.SqsSubscription(imageProcessQueue, {
         filterPolicy: {
@@ -154,6 +146,7 @@ export class EDAAppStack extends cdk.Stack {
       })
     );
     
+    // Subscribe mailer queue to image topic (existing functionality)
     newImageTopic.addSubscription(
       new subs.SqsSubscription(mailerQ)
     );
@@ -181,9 +174,9 @@ export class EDAAppStack extends cdk.Stack {
       new subs.LambdaSubscription(updateStatusFn)
     );
 
-    // Subscribe StatusUpdateMailer Lambda to status topic
+    // Subscribe status update SQS queue to status topic
     statusUpdateTopic.addSubscription(
-      new subs.LambdaSubscription(statusUpdateMailerFn, {
+      new subs.SqsSubscription(statusUpdateMailerQ, {
         filterPolicy: {
           'status_update': sns.SubscriptionFilter.existsFilter(),
         },
@@ -197,12 +190,19 @@ export class EDAAppStack extends cdk.Stack {
     });
     processImageFn.addEventSource(newImageEventSource);
     
-    // SQS --> Mailer Lambda
+    // SQS --> Mailer Lambda (for image uploads)
     const newImageMailEventSource = new events.SqsEventSource(mailerQ, {
       batchSize: 5,
       maxBatchingWindow: cdk.Duration.seconds(5),
     });
     mailerFn.addEventSource(newImageMailEventSource);
+
+    // SQS --> Mailer Lambda (for status updates)
+    const statusUpdateMailEventSource = new events.SqsEventSource(statusUpdateMailerQ, {
+      batchSize: 5,
+      maxBatchingWindow: cdk.Duration.seconds(5),
+    });
+    mailerFn.addEventSource(statusUpdateMailEventSource);
 
     // Permissions
     imagesBucket.grantRead(processImageFn);
@@ -210,23 +210,10 @@ export class EDAAppStack extends cdk.Stack {
     photosTable.grantReadWriteData(processImageFn);
     photosTable.grantReadWriteData(addMetadataFn);
     photosTable.grantReadWriteData(updateStatusFn);
-    photosTable.grantReadData(statusUpdateMailerFn);
+    photosTable.grantReadData(mailerFn);
     
     // SES permissions for mailer function
     mailerFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: [
-          "ses:SendEmail",
-          "ses:SendRawEmail",
-          "ses:SendTemplatedEmail",
-        ],
-        resources: ["*"],
-      })
-    );
-
-    // SES permissions for status update mailer
-    statusUpdateMailerFn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: [
