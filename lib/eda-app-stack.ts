@@ -148,7 +148,13 @@ export class EDAAppStack extends cdk.Stack {
     
     // Subscribe mailer queue to image topic (existing functionality)
     newImageTopic.addSubscription(
-      new subs.SqsSubscription(mailerQ)
+      new subs.SqsSubscription(mailerQ, {
+        filterPolicy: {
+          'suffix': sns.SubscriptionFilter.stringFilter({
+            allowlist: ['.jpeg', '.png'],
+          }),
+        },
+      })
     );
 
     // Connect DLQ to Remove Image Lambda
