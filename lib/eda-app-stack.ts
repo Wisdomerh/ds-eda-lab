@@ -32,14 +32,21 @@ export class EDAAppStack extends cdk.Stack {
       receiveMessageWaitTime: cdk.Duration.seconds(10),
     });
 
+<<<<<<< HEAD
     // Integration infrastructure - using DLQ for failed processing
+=======
+    // Integration infrastructure
+>>>>>>> c56e0379118dce7862f2b84cc7b2078a61680d54
     const imageProcessQueue = new sqs.Queue(this, "img-created-queue", {
       receiveMessageWaitTime: cdk.Duration.seconds(10),
       deadLetterQueue: {
         queue: invalidImageDLQ,
         maxReceiveCount: 1,
       },
+<<<<<<< HEAD
       visibilityTimeout: cdk.Duration.seconds(30),
+=======
+>>>>>>> c56e0379118dce7862f2b84cc7b2078a61680d54
     });
 
     const mailerQ = new sqs.Queue(this, "mailer-queue", {
@@ -85,10 +92,14 @@ export class EDAAppStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(5),
       entry: `${__dirname}/../lambdas/mailer.ts`,
       environment: {
+<<<<<<< HEAD
         SES_REGION: 'eu-west-1',
         SES_EMAIL_FROM: 'wisdomonsobo@gmail.com',
         SES_EMAIL_TO: '20097898@mail.wit.ie',
         TABLE_NAME: photosTable.tableName
+=======
+        TABLE_NAME: photosTable.tableName,
+>>>>>>> c56e0379118dce7862f2b84cc7b2078a61680d54
       },
     });
 
@@ -139,13 +150,27 @@ export class EDAAppStack extends cdk.Stack {
       new s3n.SnsDestination(newImageTopic)
     );
 
+<<<<<<< HEAD
     // SNS --> SQS subscriptions
     // All S3 events go to the process queue for validation
+=======
+    // SNS --> SQS with filters for valid images
+>>>>>>> c56e0379118dce7862f2b84cc7b2078a61680d54
     newImageTopic.addSubscription(
-      new subs.SqsSubscription(imageProcessQueue)
+      new subs.SqsSubscription(imageProcessQueue, {
+        filterPolicy: {
+          'suffix': sns.SubscriptionFilter.stringFilter({
+            allowlist: ['.jpeg', '.png'],
+          }),
+        },
+      })
     );
     
+<<<<<<< HEAD
     // Subscribe mailer queue to the image topic
+=======
+    // Subscribe mailer queue to image topic (existing functionality)
+>>>>>>> c56e0379118dce7862f2b84cc7b2078a61680d54
     newImageTopic.addSubscription(
       new subs.SqsSubscription(mailerQ)
     );
