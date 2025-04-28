@@ -33,7 +33,7 @@ export const handler: SQSHandler = async (event: any) => {
   console.log("Event ", JSON.stringify(event));
   for (const record of event.Records) {
     const recordBody = JSON.parse(record.body);
-    
+
     // Check if this is a status update message
     if (recordBody.MessageAttributes && 
         recordBody.MessageAttributes.status_update && 
@@ -52,7 +52,6 @@ export const handler: SQSHandler = async (event: any) => {
           const srcBucket = s3e.bucket.name;
           // Object key may have spaces or unicode non-ASCII characters.
           const srcKey = decodeURIComponent(s3e.object.key.replace(/\+/g, " "));
-<<<<<<< HEAD
           
           // Only send emails for valid image types
           if (srcKey.toLowerCase().endsWith('.jpeg') || 
@@ -72,19 +71,6 @@ export const handler: SQSHandler = async (event: any) => {
             }
           } else {
             console.log(`Skipping email for invalid file type: ${srcKey}`);
-=======
-          try {
-            const { name, email, message }: ContactDetails = {
-              name: "The Photo Album",
-              email: SES_EMAIL_FROM,
-              message: `We received your Image. Its URL is s3://${srcBucket}/${srcKey}`,
-            };
-            const params = sendEmailParams({ name, email, message });
-            await client.send(new SendEmailCommand(params));
-          } catch (error: unknown) {
-            console.log("ERROR is: ", error);
-            // return;
->>>>>>> c56e0379118dce7862f2b84cc7b2078a61680d54
           }
         }
       }
