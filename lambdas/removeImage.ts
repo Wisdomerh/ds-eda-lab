@@ -9,23 +9,24 @@ export const handler: SQSHandler = async (event) => {
   for (const record of event.Records) {
     try {
       console.log("Processing DLQ record:", JSON.stringify(record, null, 2));
-
+      
+      // For DLQ messages, the structure is different - we need to extract the original message
       let bucketName, imageKey;
-
+      
       try {
         // Parse the DLQ message body
         const origRecord = JSON.parse(record.body);
         console.log("Parsed original record:", JSON.stringify(origRecord, null, 2));
-
+        
         if (origRecord.body) {
           // This is a DLQ message from SQS
           const origBody = JSON.parse(origRecord.body);
           console.log("Parsed original body:", JSON.stringify(origBody, null, 2));
-
+          
           if (origBody.Message) {
             const origSnsMessage = JSON.parse(origBody.Message);
             console.log("Parsed original SNS message:", JSON.stringify(origSnsMessage, null, 2));
-
+            
             if (origSnsMessage.Records && origSnsMessage.Records[0] && origSnsMessage.Records[0].s3) {
               const s3Info = origSnsMessage.Records[0].s3;
               bucketName = s3Info.bucket.name;
@@ -48,25 +49,25 @@ export const handler: SQSHandler = async (event) => {
 
       if (bucketName && imageKey) {
         console.log(`Removing invalid image: ${imageKey} from bucket: ${bucketName}`);
-
+        
         // Use bucket name from environment if not found in message
         if (!bucketName && process.env.BUCKET_NAME) {
           bucketName = process.env.BUCKET_NAME;
         }
-
+        
         // Check if the file exists
         try {
           await s3.send(new HeadObjectCommand({
             Bucket: bucketName,
             Key: imageKey
           }));
-
+          
           // File exists, delete it
           await s3.send(new DeleteObjectCommand({
             Bucket: bucketName,
             Key: imageKey
           }));
-
+          
           console.log(`Successfully removed invalid file ${imageKey} from bucket ${bucketName}`);
         } catch (fileError) {
           if (fileError instanceof Error) {

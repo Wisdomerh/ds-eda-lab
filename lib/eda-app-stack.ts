@@ -32,6 +32,7 @@ export class EDAAppStack extends cdk.Stack {
       receiveMessageWaitTime: cdk.Duration.seconds(10),
     });
 
+    // Integration infrastructure - using DLQ for failed processing
     const imageProcessQueue = new sqs.Queue(this, "img-created-queue", {
       receiveMessageWaitTime: cdk.Duration.seconds(10),
       deadLetterQueue: {
@@ -39,7 +40,6 @@ export class EDAAppStack extends cdk.Stack {
         maxReceiveCount: 1,
       },
       visibilityTimeout: cdk.Duration.seconds(30),
-
     });
 
     const mailerQ = new sqs.Queue(this, "mailer-queue", {
@@ -138,18 +138,14 @@ export class EDAAppStack extends cdk.Stack {
       s3.EventType.OBJECT_CREATED,
       new s3n.SnsDestination(newImageTopic)
     );
+
     // SNS --> SQS subscriptions
     // All S3 events go to the process queue for validation
     newImageTopic.addSubscription(
-      new subs.SqsSubscription(imageProcessQueue, {
-        filterPolicy: {
-          'suffix': sns.SubscriptionFilter.stringFilter({
-            allowlist: ['.jpeg', '.png'],
-          }),
-        },
-      })
+      new subs.SqsSubscription(imageProcessQueue)
     );
     
+    // Subscribe mailer queue to the image topic
     newImageTopic.addSubscription(
       new subs.SqsSubscription(mailerQ)
     );

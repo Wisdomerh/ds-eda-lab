@@ -33,7 +33,7 @@ export const handler: SQSHandler = async (event: any) => {
   console.log("Event ", JSON.stringify(event));
   for (const record of event.Records) {
     const recordBody = JSON.parse(record.body);
-
+    
     // Check if this is a status update message
     if (recordBody.MessageAttributes && 
         recordBody.MessageAttributes.status_update && 
