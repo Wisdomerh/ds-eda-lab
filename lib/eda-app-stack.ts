@@ -210,6 +210,7 @@ export class EDAAppStack extends cdk.Stack {
     photosTable.grantReadWriteData(addMetadataFn);
     photosTable.grantReadWriteData(updateStatusFn);
     photosTable.grantReadData(mailerFn);
+
     
     // SES permissions for mailer function
     mailerFn.addToRolePolicy(
