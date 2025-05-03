@@ -32,13 +32,14 @@ export class EDAAppStack extends cdk.Stack {
       receiveMessageWaitTime: cdk.Duration.seconds(10),
     });
 
-    // Integration infrastructure
+    // Integration infrastructure - using DLQ for failed processing
     const imageProcessQueue = new sqs.Queue(this, "img-created-queue", {
       receiveMessageWaitTime: cdk.Duration.seconds(10),
       deadLetterQueue: {
         queue: invalidImageDLQ,
         maxReceiveCount: 1,
       },
+      visibilityTimeout: cdk.Duration.seconds(30),
     });
 
     const mailerQ = new sqs.Queue(this, "mailer-queue", {
@@ -81,10 +82,13 @@ export class EDAAppStack extends cdk.Stack {
     const mailerFn = new lambdanode.NodejsFunction(this, "mailer-function", {
       runtime: lambda.Runtime.NODEJS_16_X,
       memorySize: 1024,
-      timeout: cdk.Duration.seconds(3),
+      timeout: cdk.Duration.seconds(5),
       entry: `${__dirname}/../lambdas/mailer.ts`,
       environment: {
-        TABLE_NAME: photosTable.tableName,
+        SES_REGION: 'eu-west-1',
+        SES_EMAIL_FROM: 'wisdomonsobo@gmail.com',
+        SES_EMAIL_TO: '20097898@mail.wit.ie',
+        TABLE_NAME: photosTable.tableName
       },
     });
 
@@ -135,18 +139,13 @@ export class EDAAppStack extends cdk.Stack {
       new s3n.SnsDestination(newImageTopic)
     );
 
-    // SNS --> SQS with filters for valid images
+    // SNS --> SQS subscriptions
+    // All S3 events go to the process queue for validation
     newImageTopic.addSubscription(
-      new subs.SqsSubscription(imageProcessQueue, {
-        filterPolicy: {
-          'suffix': sns.SubscriptionFilter.stringFilter({
-            allowlist: ['.jpeg', '.png'],
-          }),
-        },
-      })
+      new subs.SqsSubscription(imageProcessQueue)
     );
     
-    // Subscribe mailer queue to image topic (existing functionality)
+    // Subscribe mailer queue to the image topic
     newImageTopic.addSubscription(
       new subs.SqsSubscription(mailerQ, {
         filterPolicy: {
@@ -217,6 +216,7 @@ export class EDAAppStack extends cdk.Stack {
     photosTable.grantReadWriteData(addMetadataFn);
     photosTable.grantReadWriteData(updateStatusFn);
     photosTable.grantReadData(mailerFn);
+
     
     // SES permissions for mailer function
     mailerFn.addToRolePolicy(

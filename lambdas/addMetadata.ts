@@ -20,13 +20,34 @@ export const handler: SNSHandler = async (event: SNSEvent) => {
         continue;
       }
       
+      // Validate metadata type
+      if (!['Caption', 'Date', 'name'].includes(metadataType)) {
+        console.error(`Invalid metadata type: ${metadataType}. Must be Caption, Date, or name.`);
+        continue;
+      }
+      
+      // Create a properly escaped update expression for reserved keywords
+      let updateExpression = "";
+      let expressionAttributeNames = {};
+      
+      // Handle reserved keywords by using expression attribute names
+      if (metadataType.toLowerCase() === 'name' || metadataType.toLowerCase() === 'date') {
+        updateExpression = "SET #attrName = :value";
+        expressionAttributeNames = { "#attrName": metadataType.toLowerCase() };
+      } else {
+        updateExpression = `SET ${metadataType.toLowerCase()} = :value`;
+      }
+      
       // Update the DynamoDB record with the new metadata
       const updateParams = {
         TableName: process.env.TABLE_NAME,
         Key: marshall({ id: message.id }),
-        UpdateExpression: `SET ${metadataType.toLowerCase()} = :value`,
+        UpdateExpression: updateExpression,
         ExpressionAttributeValues: marshall({
           ':value': message.value
+        }),
+        ...(Object.keys(expressionAttributeNames).length > 0 && { 
+          ExpressionAttributeNames: expressionAttributeNames 
         })
       };
       

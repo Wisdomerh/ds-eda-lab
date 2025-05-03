@@ -1,5 +1,4 @@
 import { SQSHandler } from "aws-lambda";
-import { SES_EMAIL_FROM, SES_EMAIL_TO, SES_REGION } from "../env";
 import {
   SESClient,
   SendEmailCommand,
@@ -8,11 +7,10 @@ import {
 import { DynamoDBClient, GetItemCommand } from "@aws-sdk/client-dynamodb";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 
-if (!SES_EMAIL_TO || !SES_EMAIL_FROM || !SES_REGION) {
-  throw new Error(
-    "Please add the SES_EMAIL_TO, SES_EMAIL_FROM and SES_REGION environment variables in an env.js file located in the root directory"
-  );
-}
+// Use environment variables from Lambda instead of importing from '../env'
+const SES_REGION = process.env.SES_REGION || 'eu-west-1';
+const SES_EMAIL_FROM = process.env.SES_EMAIL_FROM || 'wisdomonsobo@gmail.com';
+const SES_EMAIL_TO = process.env.SES_EMAIL_TO || '20097898@mail.wit.ie';
 
 type ContactDetails = {
   name: string;
@@ -54,17 +52,25 @@ export const handler: SQSHandler = async (event: any) => {
           const srcBucket = s3e.bucket.name;
           // Object key may have spaces or unicode non-ASCII characters.
           const srcKey = decodeURIComponent(s3e.object.key.replace(/\+/g, " "));
-          try {
-            const { name, email, message }: ContactDetails = {
-              name: "The Photo Album",
-              email: SES_EMAIL_FROM,
-              message: `We received your Image. Its URL is s3://${srcBucket}/${srcKey}`,
-            };
-            const params = sendEmailParams({ name, email, message });
-            await client.send(new SendEmailCommand(params));
-          } catch (error: unknown) {
-            console.log("ERROR is: ", error);
-            // return;
+          
+          // Only send emails for valid image types
+          if (srcKey.toLowerCase().endsWith('.jpeg') || 
+              srcKey.toLowerCase().endsWith('.png') ||
+              srcKey.toLowerCase().endsWith('.jpg')) {
+            try {
+              const { name, email, message }: ContactDetails = {
+                name: "The Photo Album",
+                email: SES_EMAIL_FROM,
+                message: `We received your Image. Its URL is s3://${srcBucket}/${srcKey}`,
+              };
+              const params = sendEmailParams({ name, email, message });
+              await client.send(new SendEmailCommand(params));
+              console.log("Email sent successfully for image:", srcKey);
+            } catch (error: unknown) {
+              console.log("ERROR is: ", error);
+            }
+          } else {
+            console.log(`Skipping email for invalid file type: ${srcKey}`);
           }
         }
       }
